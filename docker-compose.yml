@@ -1,0 +1,61 @@
+version: '3.8'
+
+services:
+  whatsapp-bridge:
+    build:
+      context: ./whatsapp-bridge
+      dockerfile: Dockerfile
+    image: rhv044/whatsapp-bridge:latest
+    container_name: whatsapp-bridge
+    ports:
+      - "8080:8080"
+    volumes:
+      # Persist WhatsApp session data (messages.db and whatsapp.db are in /app/store)
+      - whatsapp-data:/app/store
+      # Mount the entire whatsapp-bridge directory for development (COMMENTED FOR PRODUCTION)
+      # - ./whatsapp-bridge:/app:delegated
+    restart: unless-stopped
+    networks:
+      - whatsapp-network
+    environment:
+      - BRIDGE_PORT=8080
+    healthcheck:
+      test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://localhost:8080/health" ]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
+
+  whatsapp-mcp-server:
+    build:
+      context: ./whatsapp-mcp-server
+      dockerfile: Dockerfile
+    image: rhv044/whatsapp-mcp-server:latest
+    container_name: whatsapp-mcp-server
+    ports:
+      - "3000:3000"
+    volumes:
+      # Mount the MCP server directory for development (COMMENTED FOR PRODUCTION)
+      # - ./whatsapp-mcp-server:/app:delegated
+      # Share the WhatsApp data volume to access messages database (bridge stores in /app/store)
+      - whatsapp-data:/app/store
+    depends_on:
+      whatsapp-bridge:
+        condition: service_started
+    restart: unless-stopped
+    networks:
+      - whatsapp-network
+    environment:
+      - WHATSAPP_BRIDGE_URL=http://whatsapp-bridge:8080
+      - MESSAGES_DB_PATH=/app/store/messages.db
+      - PYTHONUNBUFFERED=1
+    stdin_open: true
+    tty: true
+
+volumes:
+  whatsapp-data:
+    driver: local
+
+networks:
+  whatsapp-network:
+    driver: bridge

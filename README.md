@@ -16,7 +16,22 @@ Here's an example of what you can do when it's connected to Claude.
 
 ## Installation
 
-### Prerequisites
+### Option 1: Docker (Recommended)
+
+The easiest way to run this project is using Docker. See [DOCKER_README.md](./DOCKER_README.md) for complete Docker setup instructions.
+
+Quick start:
+```bash
+# Build and start all services
+docker-compose up -d
+
+# View logs to scan QR code (first time only)
+docker-compose logs -f whatsapp-bridge
+```
+
+### Option 2: Manual Installation
+
+#### Prerequisites
 
 - Go
 - Python 3.6+

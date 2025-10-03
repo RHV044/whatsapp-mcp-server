@@ -1,0 +1,139 @@
+#0 building with "desktop-linux" instance using docker driver
+
+#1 [internal] load build definition from Dockerfile
+#1 transferring dockerfile: 863B done
+#1 DONE 0.0s
+
+#2 [internal] load metadata for docker.io/library/golang:1.24-alpine
+#2 DONE 0.0s
+
+#3 [internal] load metadata for docker.io/library/alpine:latest
+#3 DONE 0.6s
+
+#4 [internal] load .dockerignore
+#4 transferring context: 2B done
+#4 DONE 0.0s
+
+#5 [builder 1/7] FROM docker.io/library/golang:1.24-alpine
+#5 CACHED
+
+#6 [stage-1 1/5] FROM docker.io/library/alpine:latest@sha256:4bcff63911fcb4448bd4fdacec207030997caf25e9bea4045fa6c8c44de311d1
+#6 CACHED
+
+#7 [internal] load build context
+#7 transferring context: 40.72kB done
+#7 DONE 0.0s
+
+#8 [stage-1 2/5] RUN apk add --no-cache ca-certificates sqlite-libs
+#8 0.352 fetch https://dl-cdn.alpinelinux.org/alpine/v3.22/main/x86_64/APKINDEX.tar.gz
+#8 0.735 fetch https://dl-cdn.alpinelinux.org/alpine/v3.22/community/x86_64/APKINDEX.tar.gz
+#8 1.298 (1/2) Installing ca-certificates (20250911-r0)
+#8 1.321 (2/2) Installing sqlite-libs (3.49.2-r1)
+#8 1.355 Executing busybox-1.37.0-r18.trigger
+#8 1.360 Executing ca-certificates-20250911-r0.trigger
+#8 1.402 OK: 9 MiB in 18 packages
+#8 DONE 1.5s
+
+#9 [stage-1 3/5] WORKDIR /app
+#9 DONE 0.1s
+
+#10 [builder 2/7] RUN apk add --no-cache gcc musl-dev sqlite-dev
+#10 0.352 fetch https://dl-cdn.alpinelinux.org/alpine/v3.22/main/x86_64/APKINDEX.tar.gz
+#10 0.729 fetch https://dl-cdn.alpinelinux.org/alpine/v3.22/community/x86_64/APKINDEX.tar.gz
+#10 1.321 (1/20) Installing libgcc (14.2.0-r6)
+#10 1.338 (2/20) Installing jansson (2.14.1-r0)
+#10 1.344 (3/20) Installing libstdc++ (14.2.0-r6)
+#10 1.377 (4/20) Installing zstd-libs (1.5.7-r0)
+#10 1.392 (5/20) Installing binutils (2.44-r3)
+#10 1.485 (6/20) Installing libgomp (14.2.0-r6)
+#10 1.503 (7/20) Installing libatomic (14.2.0-r6)
+#10 1.509 (8/20) Installing gmp (6.3.0-r3)
+#10 1.522 (9/20) Installing isl26 (0.26-r1)
+#10 1.559 (10/20) Installing mpfr4 (4.2.1_p1-r0)
+#10 1.574 (11/20) Installing mpc1 (1.3.1-r1)
+#10 1.580 (12/20) Installing gcc (14.2.0-r6)
+#10 3.187 (13/20) Installing musl-dev (1.2.5-r10)
+#10 3.532 (14/20) Installing ncurses-terminfo-base (6.5_p20250503-r0)
+#10 3.542 (15/20) Installing libncursesw (6.5_p20250503-r0)
+#10 3.552 (16/20) Installing readline (8.2.13-r1)
+#10 3.562 (17/20) Installing sqlite (3.49.2-r1)
+#10 3.592 (18/20) Installing pkgconf (2.4.3-r0)
+#10 3.600 (19/20) Installing sqlite-libs (3.49.2-r1)
+#10 3.631 (20/20) Installing sqlite-dev (3.49.2-r1)
+#10 3.650 Executing busybox-1.37.0-r18.trigger
+#10 3.655 OK: 177 MiB in 37 packages
+#10 DONE 3.8s
+
+#11 [builder 3/7] WORKDIR /app
+#11 DONE 0.1s
+
+#12 [builder 4/7] COPY go.mod go.sum ./
+#12 DONE 0.1s
+
+#13 [builder 5/7] COPY main.go .
+#13 DONE 0.1s
+
+#14 [builder 6/7] RUN go mod tidy && go mod download
+#14 0.366 go: downloading go.mau.fi/whatsmeow v0.0.0-20251003120353-0091f66a98cc
+#14 0.376 go: downloading google.golang.org/protobuf v1.36.5
+#14 0.377 go: downloading github.com/mdp/qrterminal v1.0.1
+#14 0.379 go: downloading github.com/mattn/go-sqlite3 v1.14.24
+#14 0.502 go: downloading rsc.io/qr v0.2.0
+#14 0.732 go: downloading go.mau.fi/util v0.8.6
+#14 0.732 go: downloading github.com/google/uuid v1.6.0
+#14 0.733 go: downloading go.mau.fi/libsignal v0.1.2
+#14 0.733 go: downloading github.com/rs/zerolog v1.33.0
+#14 0.734 go: downloading github.com/gorilla/websocket v1.5.0
+#14 0.734 go: downloading golang.org/x/crypto v0.36.0
+#14 0.795 go: downloading golang.org/x/net v0.37.0
+#14 0.795 go: downloading filippo.io/edwards25519 v1.1.0
+#14 0.796 go: downloading github.com/mattn/go-colorable v0.1.13
+#14 0.797 go: downloading golang.org/x/sys v0.31.0
+#14 0.821 go: downloading github.com/beeper/argo-go v1.1.2
+#14 0.821 go: downloading golang.org/x/exp v0.0.0-20250911091902-df9299821621
+#14 0.821 go: downloading github.com/petermattis/goid v0.0.0-20250904145737-900bdf8bb490
+#14 0.821 go: downloading github.com/DATA-DOG/go-sqlmock v1.5.2
+#14 0.821 go: downloading github.com/stretchr/testify v1.10.0
+#14 0.844 go: downloading github.com/mattn/go-isatty v0.0.19
+#14 0.860 go: downloading github.com/google/go-cmp v0.5.5
+#14 0.982 go: downloading gopkg.in/yaml.v3 v3.0.1
+#14 0.982 go: downloading github.com/davecgh/go-spew v1.1.1
+#14 0.982 go: downloading github.com/pmezard/go-difflib v1.0.0
+#14 0.986 go: downloading golang.org/x/xerrors v0.0.0-20191204190536-9bdfabe68543
+#14 1.051 go: downloading github.com/vektah/gqlparser/v2 v2.5.27
+#14 1.051 go: downloading github.com/elliotchance/orderedmap/v3 v3.1.0
+#14 1.123 go: downloading github.com/google/go-cmp v0.6.0
+#14 1.213 go: downloading github.com/mattn/go-sqlite3 v1.14.32
+#14 1.213 go: downloading google.golang.org/protobuf v1.36.9
+#14 1.214 go: downloading github.com/rs/zerolog v1.34.0
+#14 1.214 go: downloading go.mau.fi/libsignal v0.2.0
+#14 1.215 go: downloading go.mau.fi/util v0.9.1
+#14 1.272 go: downloading golang.org/x/crypto v0.42.0
+#14 1.273 go: downloading golang.org/x/net v0.44.0
+#14 1.273 go: downloading github.com/stretchr/testify v1.11.1
+#14 1.279 go: downloading github.com/andreyvit/diff v0.0.0-20170406064948-c7f18ee00883
+#14 1.287 go: downloading github.com/mattn/go-colorable v0.1.14
+#14 1.287 go: downloading github.com/agnivade/levenshtein v1.2.1
+#14 1.287 go: downloading golang.org/x/sys v0.36.0
+#14 1.363 go: downloading github.com/mattn/go-isatty v0.0.20
+#14 1.465 go: downloading github.com/sergi/go-diff v1.3.1
+#14 1.642 go: downloading golang.org/x/text v0.29.0
+#14 DONE 2.7s
+
+#15 [builder 7/7] RUN CGO_ENABLED=1 GOOS=linux go build -o whatsapp-bridge main.go
+#15 DONE 59.2s
+
+#16 [stage-1 4/5] COPY --from=builder /app/whatsapp-bridge .
+#16 DONE 0.1s
+
+#17 [stage-1 5/5] RUN mkdir -p /app/data
+#17 DONE 0.4s
+
+#18 exporting to image
+#18 exporting layers
+#18 exporting layers 0.2s done
+#18 writing image sha256:337abb6e3b87c5c92650b4d9efb262bd43013b09a8aeecd9f1bc70b1aefc50f8 done
+#18 naming to docker.io/rhv044/whatsapp-bridge:latest 0.0s done
+#18 DONE 0.3s
+
+View build details: docker-desktop://dashboard/build/desktop-linux/desktop-linux/xhooq3q9psqj5bku3qukikx0l

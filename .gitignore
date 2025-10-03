@@ -1,3 +1,14 @@
 *.db
 claude_desktop_config.json
 whatsapp.log
+
+# Docker
+.env
+docker-compose.override.yml
+
+# VS Code
+.vscode/*
+!.vscode/settings.json
+!.vscode/tasks.json
+!.vscode/launch.json
+!.vscode/extensions.json
