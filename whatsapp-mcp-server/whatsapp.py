@@ -1,6 +1,6 @@
 import sqlite3
 from datetime import datetime
-from dataclasses import dataclass
+from dataclasses import dataclass, asdict
 from typing import Optional, List, Tuple
 import os
 import os.path
@@ -54,6 +54,17 @@ class MessageContext:
     message: Message
     before: List[Message]
     after: List[Message]
+
+def dataclass_to_dict(obj):
+    """Convert a dataclass to a dictionary with proper datetime serialization."""
+    if obj is None:
+        return None
+    result = asdict(obj)
+    # Convert datetime objects to ISO format strings
+    for key, value in result.items():
+        if isinstance(value, datetime):
+            result[key] = value.isoformat()
+    return result
 
 def get_sender_name(sender_jid: str) -> str:
     try:
@@ -207,21 +218,32 @@ def list_messages(
                 id=msg[6],
                 media_type=msg[7]
             )
-            result.append(message)
+            result.append(dataclass_to_dict(message))
             
         if include_context and result:
             # Add context for each message
             messages_with_context = []
-            for msg in result:
-                context = get_message_context(msg.id, context_before, context_after)
-                messages_with_context.extend(context.before)
-                messages_with_context.append(context.message)
-                messages_with_context.extend(context.after)
+            for msg_dict in result:
+                # Reconstruct Message object for get_message_context
+                msg_obj = Message(
+                    timestamp=datetime.fromisoformat(msg_dict['timestamp']),
+                    sender=msg_dict['sender'],
+                    chat_name=msg_dict['chat_name'],
+                    content=msg_dict['content'],
+                    is_from_me=msg_dict['is_from_me'],
+                    chat_jid=msg_dict['chat_jid'],
+                    id=msg_dict['id'],
+                    media_type=msg_dict['media_type']
+                )
+                context = get_message_context(msg_obj.id, context_before, context_after)
+                messages_with_context.extend([dataclass_to_dict(m) for m in context.before])
+                messages_with_context.append(dataclass_to_dict(context.message))
+                messages_with_context.extend([dataclass_to_dict(m) for m in context.after])
             
-            return format_messages_list(messages_with_context, show_chat_info=True)
+            return messages_with_context
             
-        # Format and display messages without context
-        return format_messages_list(result, show_chat_info=True)    
+        # Return messages without context
+        return result    
         
     except sqlite3.Error as e:
         print(f"Database error: {e}")
@@ -386,7 +408,7 @@ def list_chats(
                 last_sender=chat_data[4],
                 last_is_from_me=chat_data[5]
             )
-            result.append(chat)
+            result.append(dataclass_to_dict(chat))
             
         return result
         
@@ -428,7 +450,7 @@ def search_contacts(query: str) -> List[Contact]:
                 name=contact_data[1],
                 jid=contact_data[0]
             )
-            result.append(contact)
+            result.append(dataclass_to_dict(contact))
             
         return result
         
@@ -479,7 +501,7 @@ def get_contact_chats(jid: str, limit: int = 20, page: int = 0) -> List[Chat]:
                 last_sender=chat_data[4],
                 last_is_from_me=chat_data[5]
             )
-            result.append(chat)
+            result.append(dataclass_to_dict(chat))
             
         return result
         
