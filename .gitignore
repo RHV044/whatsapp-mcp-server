@@ -12,3 +12,6 @@ docker-compose.override.yml
 !.vscode/tasks.json
 !.vscode/launch.json
 !.vscode/extensions.json
+
+# log files
+**/*.log
