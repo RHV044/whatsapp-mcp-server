@@ -11,6 +11,7 @@ COPY go.mod go.sum ./
 
 # Copy source code
 COPY main.go .
+COPY scheduler/ ./scheduler/
 
 # Download dependencies and update go.sum
 RUN go mod tidy && go mod download

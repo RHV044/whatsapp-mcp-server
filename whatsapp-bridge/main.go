@@ -29,6 +29,8 @@ import (
 	"go.mau.fi/whatsmeow/types/events"
 	waLog "go.mau.fi/whatsmeow/util/log"
 	"google.golang.org/protobuf/proto"
+	
+	"whatsapp-client/scheduler"
 )
 
 // Message represents a chat message for our client
@@ -678,7 +680,10 @@ func extractDirectPathFromURL(url string) string {
 }
 
 // Start a REST API server to expose the WhatsApp client functionality
-func startRESTServer(client *whatsmeow.Client, messageStore *MessageStore, port int) {
+func startRESTServer(client *whatsmeow.Client, messageStore *MessageStore, msgScheduler *scheduler.MessageScheduler, port int) {
+	// Setup scheduler endpoints
+	scheduler.SetupHandlers(msgScheduler)
+	
 	// Handler for sending messages
 	http.HandleFunc("/api/send", func(w http.ResponseWriter, r *http.Request) {
 		// Only allow POST requests
@@ -837,6 +842,20 @@ func main() {
 	}
 	defer messageStore.Close()
 
+	// Initialize scheduler database
+	schedulerDB, err := scheduler.NewSchedulerDB("store/scheduler.db")
+	if err != nil {
+		logger.Errorf("Failed to initialize scheduler database: %v", err)
+		return
+	}
+	defer schedulerDB.Close()
+
+	// Initialize message scheduler
+	messageScheduler := scheduler.NewMessageScheduler(schedulerDB, messageStore.db, client, sendWhatsAppMessage)
+	// Start scheduler worker (check every minute)
+	messageScheduler.Start(1 * time.Minute)
+	defer messageScheduler.Stop()
+
 	// Setup event handling for messages and history sync
 	client.AddEventHandler(func(evt interface{}) {
 		switch v := evt.(type) {
@@ -909,7 +928,7 @@ func main() {
 	fmt.Println("\n✓ Connected to WhatsApp! Type 'help' for commands.")
 
 	// Start REST API server
-	startRESTServer(client, messageStore, 8080)
+	startRESTServer(client, messageStore, messageScheduler, 8080)
 
 	// Create a channel to keep the main goroutine alive
 	exitChan := make(chan os.Signal, 1)

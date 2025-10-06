@@ -143,6 +143,7 @@ Once connected, you can interact with your WhatsApp contacts through Claude, lev
 
 Claude can access the following tools to interact with WhatsApp:
 
+#### Message Reading & Search
 - **search_contacts**: Search for contacts by name or phone number
 - **list_messages**: Retrieve messages with optional filters and context
 - **list_chats**: List available chats with metadata
@@ -151,10 +152,43 @@ Claude can access the following tools to interact with WhatsApp:
 - **get_contact_chats**: List all chats involving a specific contact
 - **get_last_interaction**: Get the most recent message with a contact
 - **get_message_context**: Retrieve context around a specific message
+
+#### Message Sending
 - **send_message**: Send a WhatsApp message to a specified phone number or group JID
 - **send_file**: Send a file (image, video, raw audio, document) to a specified recipient
 - **send_audio_message**: Send an audio file as a WhatsApp voice message (requires the file to be an .ogg opus file or ffmpeg must be installed)
 - **download_media**: Download media from a WhatsApp message and get the local file path
+
+#### 📅 Message Scheduling (NEW)
+- **schedule_message**: Schedule a message to be sent at a future time with optional conditional logic
+- **list_scheduled_messages**: View all scheduled messages with filters
+- **get_scheduled_message**: Get details of a specific scheduled message
+- **cancel_scheduled_message**: Permanently cancel a scheduled message
+- **pause_scheduled_message**: Temporarily pause a scheduled message
+- **resume_scheduled_message**: Resume a paused scheduled message
+
+For detailed information about the scheduler, see [SCHEDULER_README.md](./SCHEDULER_README.md).
+
+#### Example: Smart Scheduled Messages
+
+```
+User: "Schedule a message to Connie tomorrow at 3pm saying 
+       'Don't forget the meeting!' but only if she doesn't 
+       message me before then"
+
+Claude will execute:
+schedule_message(
+    recipient="5491156543944",
+    message="Don't forget the meeting!",
+    scheduled_time="2025-10-06T15:00:00Z",
+    check_for_response=True
+)
+```
+
+The scheduler will:
+- ✅ Automatically pause the message if Connie sends any message after scheduling
+- ✅ Send the message at 3pm if no response is received
+- ✅ Log all actions for monitoring
 
 ### Media Handling Features
 

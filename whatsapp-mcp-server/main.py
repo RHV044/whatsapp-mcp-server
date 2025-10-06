@@ -1,5 +1,7 @@
 from typing import List, Dict, Any, Optional
 from mcp.server.fastmcp import FastMCP
+import requests
+import os
 from whatsapp import (
     search_contacts as whatsapp_search_contacts,
     list_messages as whatsapp_list_messages,
@@ -15,6 +17,9 @@ from whatsapp import (
     download_media as whatsapp_download_media,
     dataclass_to_dict
 )
+
+# Configuration from environment variables or defaults
+BRIDGE_BASE_URL = os.environ.get('WHATSAPP_BRIDGE_URL', 'http://localhost:8080')
 
 # Initialize FastMCP server
 mcp = FastMCP("whatsapp")
@@ -253,6 +258,216 @@ def download_media(message_id: str, chat_jid: str) -> Dict[str, Any]:
         return {
             "success": False,
             "message": "Failed to download media"
+        }
+
+@mcp.tool()
+def schedule_message(
+    recipient: str,
+    message: str,
+    scheduled_time: str,
+    check_for_response: bool = True
+) -> Dict[str, Any]:
+    """Schedule a WhatsApp message to be sent in the future.
+    
+    The message will only be sent at the specified time if the condition is met.
+    By default (check_for_response=True), the message will be automatically paused
+    if the recipient sends any message after this scheduled message is created.
+    
+    Args:
+        recipient: Phone number with country code (no + or symbols) or JID 
+                  (e.g., "1234567890" or "1234567890@s.whatsapp.net")
+        message: The message text to send
+        scheduled_time: ISO-8601 formatted datetime when to send the message 
+                       (e.g., "2025-10-06T15:30:00Z" or "2025-10-06T15:30:00-03:00")
+        check_for_response: If True, the message will be paused if the recipient 
+                           sends a message after scheduling (default: True)
+    
+    Returns:
+        A dictionary with success status and the scheduled message details
+    
+    Example:
+        schedule_message(
+            recipient="5491156543944",
+            message="Hi! Just checking in",
+            scheduled_time="2025-10-06T15:00:00Z",
+            check_for_response=True
+        )
+    """
+    try:
+        response = requests.post(
+            f"{BRIDGE_BASE_URL}/api/schedule",
+            json={
+                "recipient": recipient,
+                "message": message,
+                "scheduled_time": scheduled_time,
+                "check_for_response": check_for_response
+            },
+            timeout=10.0
+        )
+        response.raise_for_status()
+        return response.json()
+    
+    except requests.exceptions.RequestException as e:
+        return {
+            "success": False,
+            "message": f"Failed to schedule message: {str(e)}"
+        }
+
+@mcp.tool()
+def list_scheduled_messages(
+    status: Optional[str] = None,
+    recipient: Optional[str] = None
+) -> Dict[str, Any]:
+    """List all scheduled messages with optional filters.
+    
+    Args:
+        status: Filter by status. Options: "pending", "sent", "paused", "cancelled", "failed"
+        recipient: Filter by recipient phone number or JID
+    
+    Returns:
+        A dictionary with success status and a list of scheduled messages
+    
+    Example:
+        # Get all pending messages
+        list_scheduled_messages(status="pending")
+        
+        # Get all messages for a specific contact
+        list_scheduled_messages(recipient="5491156543944")
+    """
+    try:
+        params = {}
+        if status:
+            params["status"] = status
+        if recipient:
+            params["recipient"] = recipient
+        
+        response = requests.get(
+            f"{BRIDGE_BASE_URL}/api/scheduled",
+            params=params,
+            timeout=10.0
+        )
+        response.raise_for_status()
+        return response.json()
+    
+    except requests.exceptions.RequestException as e:
+        return {
+            "success": False,
+            "message": f"Failed to list scheduled messages: {str(e)}",
+            "messages": []
+        }
+
+@mcp.tool()
+def get_scheduled_message(message_id: str) -> Dict[str, Any]:
+    """Get details of a specific scheduled message.
+    
+    Args:
+        message_id: The ID of the scheduled message
+    
+    Returns:
+        A dictionary with the scheduled message details
+    """
+    try:
+        response = requests.get(
+            f"{BRIDGE_BASE_URL}/api/scheduled/{message_id}",
+            timeout=10.0
+        )
+        response.raise_for_status()
+        return response.json()
+    
+    except requests.exceptions.RequestException as e:
+        return {
+            "success": False,
+            "message": f"Failed to get scheduled message: {str(e)}"
+        }
+
+@mcp.tool()
+def cancel_scheduled_message(message_id: str) -> Dict[str, Any]:
+    """Cancel a scheduled message before it's sent.
+    
+    This permanently cancels the message. It cannot be resumed after cancellation.
+    
+    Args:
+        message_id: The ID of the scheduled message to cancel
+    
+    Returns:
+        A dictionary with success status
+    
+    Example:
+        cancel_scheduled_message("abc-123-def-456")
+    """
+    try:
+        response = requests.delete(
+            f"{BRIDGE_BASE_URL}/api/scheduled/{message_id}",
+            timeout=10.0
+        )
+        response.raise_for_status()
+        return response.json()
+    
+    except requests.exceptions.RequestException as e:
+        return {
+            "success": False,
+            "message": f"Failed to cancel message: {str(e)}"
+        }
+
+@mcp.tool()
+def pause_scheduled_message(message_id: str) -> Dict[str, Any]:
+    """Pause a pending scheduled message.
+    
+    A paused message will not be sent at its scheduled time. It can be resumed later.
+    
+    Args:
+        message_id: The ID of the scheduled message to pause
+    
+    Returns:
+        A dictionary with success status
+    
+    Example:
+        pause_scheduled_message("abc-123-def-456")
+    """
+    try:
+        response = requests.patch(
+            f"{BRIDGE_BASE_URL}/api/scheduled/{message_id}",
+            json={"action": "pause"},
+            timeout=10.0
+        )
+        response.raise_for_status()
+        return response.json()
+    
+    except requests.exceptions.RequestException as e:
+        return {
+            "success": False,
+            "message": f"Failed to pause message: {str(e)}"
+        }
+
+@mcp.tool()
+def resume_scheduled_message(message_id: str) -> Dict[str, Any]:
+    """Resume a paused scheduled message.
+    
+    The message will be sent at its originally scheduled time if that time hasn't passed yet.
+    If the scheduled time has passed, it will be sent immediately.
+    
+    Args:
+        message_id: The ID of the scheduled message to resume
+    
+    Returns:
+        A dictionary with success status
+    
+    Example:
+        resume_scheduled_message("abc-123-def-456")
+    """
+    try:
+        response = requests.patch(
+            f"{BRIDGE_BASE_URL}/api/scheduled/{message_id}",
+            json={"action": "resume"},
+            timeout=10.0
+        )
+        response.raise_for_status()
+        return response.json()
+    
+    except requests.exceptions.RequestException as e:
+        return {
+            "success": False,
+            "message": f"Failed to resume message: {str(e)}"
         }
 
 if __name__ == "__main__":
