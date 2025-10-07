@@ -110,6 +110,7 @@ jobs:
           port: ${{ secrets.SSH_PORT }}
           script: |
             echo "Checking service health..."
+            cd /opt/whatsapp-mcp-server
             sleep 10
             docker compose ps
             docker compose logs --tail=20
