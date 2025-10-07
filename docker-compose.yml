@@ -17,12 +17,6 @@ services:
     environment:
       - BRIDGE_PORT=8080
       - TZ=America/Argentina/Buenos_Aires
-    healthcheck:
-      test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://localhost:8080/health"]
-      interval: 30s
-      timeout: 10s
-      retries: 3
-      start_period: 40s
     logging:
       driver: "json-file"
       options:
@@ -48,8 +42,7 @@ services:
     volumes:
       - whatsapp-data:/app/store
     depends_on:
-      whatsapp-bridge:
-        condition: service_healthy
+      - whatsapp-bridge
     restart: always
     networks:
       - whatsapp-network
@@ -60,12 +53,6 @@ services:
       - TZ=America/Argentina/Buenos_Aires
     stdin_open: true
     tty: true
-    healthcheck:
-      test: ["CMD", "python", "-c", "import socket; socket.create_connection(('localhost', 3000), timeout=5)"]
-      interval: 30s
-      timeout: 10s
-      retries: 3
-      start_period: 40s
     logging:
       driver: "json-file"
       options:
@@ -91,16 +78,10 @@ services:
       - ./certbot/conf:/etc/letsencrypt:ro
       - ./certbot/www:/var/www/certbot:ro
     depends_on:
-      whatsapp-mcp-server:
-        condition: service_healthy
+      - whatsapp-mcp-server
     restart: always
     networks:
       - whatsapp-network
-    healthcheck:
-      test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://localhost/health"]
-      interval: 30s
-      timeout: 10s
-      retries: 3
     logging:
       driver: "json-file"
       options:
