@@ -1,0 +1,26 @@
+{
+  "files.associations": {
+    "docker-compose.yml": "dockercompose",
+    "Dockerfile": "dockerfile"
+  },
+  "docker.dockerComposeBuild": true,
+  "docker.dockerComposeDetached": true,
+  "go.toolsManagement.autoUpdate": true,
+  "python.defaultInterpreterPath": "/usr/local/bin/python",
+  "python.linting.enabled": true,
+  "python.linting.pylintEnabled": false,
+  "python.linting.flake8Enabled": true,
+  "python.formatting.provider": "black",
+  "[python]": {
+    "editor.formatOnSave": true,
+    "editor.codeActionsOnSave": {
+      "source.organizeImports": "explicit"
+    }
+  },
+  "[go]": {
+    "editor.formatOnSave": true,
+    "editor.codeActionsOnSave": {
+      "source.organizeImports": "explicit"
+    }
+  }
+}

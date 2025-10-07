@@ -1,0 +1,44 @@
+{
+  "version": "0.2.0",
+  "configurations": [
+    {
+      "name": "Docker: Attach to Bridge",
+      "type": "go",
+      "request": "attach",
+      "mode": "remote",
+      "remotePath": "/app",
+      "port": 2345,
+      "host": "localhost",
+      "showLog": true
+    },
+    {
+      "name": "Docker: Attach to Python MCP",
+      "type": "python",
+      "request": "attach",
+      "connect": {
+        "host": "localhost",
+        "port": 5678
+      },
+      "pathMappings": [
+        {
+          "localRoot": "${workspaceFolder}/whatsapp-mcp-server",
+          "remoteRoot": "/app"
+        }
+      ]
+    },
+    {
+      "name": "Docker: Logs - Bridge",
+      "type": "node",
+      "request": "launch",
+      "program": "${workspaceFolder}",
+      "runtimeExecutable": "docker",
+      "runtimeArgs": [
+        "compose",
+        "logs",
+        "-f",
+        "whatsapp-bridge"
+      ],
+      "console": "integratedTerminal"
+    }
+  ]
+}

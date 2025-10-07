@@ -5,56 +5,122 @@ services:
     build:
       context: ./whatsapp-bridge
       dockerfile: Dockerfile
-    image: rhv044/whatsapp-bridge:latest
+    image: rhv044/whatsapp-bridge:prod
     container_name: whatsapp-bridge
-    ports:
-      - "8080:8080"
+    expose:
+      - "8080"
     volumes:
-      # Persist WhatsApp session data (messages.db and whatsapp.db are in /app/store)
       - whatsapp-data:/app/store
-      # Mount the entire whatsapp-bridge directory for development (COMMENTED FOR PRODUCTION)
-      # - ./whatsapp-bridge:/app:delegated
-    restart: unless-stopped
+    restart: always
     networks:
       - whatsapp-network
     environment:
       - BRIDGE_PORT=8080
+      - TZ=America/Argentina/Buenos_Aires
     healthcheck:
-      test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://localhost:8080/health" ]
+      test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://localhost:8080/health"]
       interval: 30s
       timeout: 10s
       retries: 3
-      start_period: 10s
+      start_period: 40s
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+    deploy:
+      resources:
+        limits:
+          cpus: '1.0'
+          memory: 512M
+        reservations:
+          cpus: '0.25'
+          memory: 128M
 
   whatsapp-mcp-server:
     build:
       context: ./whatsapp-mcp-server
       dockerfile: Dockerfile
-    image: rhv044/whatsapp-mcp-server:latest
+    image: rhv044/whatsapp-mcp-server:prod
     container_name: whatsapp-mcp-server
-    ports:
-      - "3000:3000"
+    expose:
+      - "3000"
     volumes:
-      # Mount the MCP server directory for development (COMMENTED FOR PRODUCTION)
-      # - ./whatsapp-mcp-server:/app:delegated
-      # Share the WhatsApp data volume to access messages database (bridge stores in /app/store)
       - whatsapp-data:/app/store
     depends_on:
       whatsapp-bridge:
-        condition: service_started
-    restart: unless-stopped
+        condition: service_healthy
+    restart: always
     networks:
       - whatsapp-network
     environment:
       - WHATSAPP_BRIDGE_URL=http://whatsapp-bridge:8080
       - MESSAGES_DB_PATH=/app/store/messages.db
       - PYTHONUNBUFFERED=1
+      - TZ=America/Argentina/Buenos_Aires
     stdin_open: true
     tty: true
+    healthcheck:
+      test: ["CMD", "python", "-c", "import socket; socket.create_connection(('localhost', 3000), timeout=5)"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+    deploy:
+      resources:
+        limits:
+          cpus: '0.5'
+          memory: 256M
+        reservations:
+          cpus: '0.1'
+          memory: 64M
+
+  nginx:
+    image: nginx:alpine
+    container_name: whatsapp-nginx
+    ports:
+      - "8443:443"
+    volumes:
+      - ./nginx/nginx.conf:/etc/nginx/nginx.conf:ro
+      - ./nginx/conf.d:/etc/nginx/conf.d:ro
+      - ./certbot/conf:/etc/letsencrypt:ro
+      - ./certbot/www:/var/www/certbot:ro
+    depends_on:
+      whatsapp-mcp-server:
+        condition: service_healthy
+    restart: always
+    networks:
+      - whatsapp-network
+    healthcheck:
+      test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://localhost/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+  certbot:
+    image: certbot/certbot
+    container_name: whatsapp-certbot
+    volumes:
+      - ./certbot/conf:/etc/letsencrypt
+      - ./certbot/www:/var/www/certbot
+    entrypoint: "/bin/sh -c 'trap exit TERM; while :; do certbot renew; sleep 12h & wait $${!}; done;'"
+    restart: always
+    networks:
+      - whatsapp-network
 
 volumes:
   whatsapp-data:
-    driver: local
+    driver: local 
 
 networks:
   whatsapp-network:

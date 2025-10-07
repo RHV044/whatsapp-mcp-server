@@ -1,0 +1,103 @@
+{
+  "version": "2.0.0",
+  "tasks": [
+    {
+      "label": "Docker: Build All",
+      "type": "shell",
+      "command": "docker-compose build",
+      "problemMatcher": [],
+      "group": {
+        "kind": "build",
+        "isDefault": true
+      },
+      "presentation": {
+        "reveal": "always",
+        "panel": "new"
+      }
+    },
+    {
+      "label": "Docker: Up",
+      "type": "shell",
+      "command": "docker-compose up -d",
+      "problemMatcher": [],
+      "group": "none",
+      "presentation": {
+        "reveal": "always",
+        "panel": "new"
+      }
+    },
+    {
+      "label": "Docker: Up (with logs)",
+      "type": "shell",
+      "command": "docker-compose up",
+      "problemMatcher": [],
+      "group": "none",
+      "presentation": {
+        "reveal": "always",
+        "panel": "new"
+      }
+    },
+    {
+      "label": "Docker: Down",
+      "type": "shell",
+      "command": "docker-compose down",
+      "problemMatcher": [],
+      "group": "none",
+      "presentation": {
+        "reveal": "always",
+        "panel": "new"
+      }
+    },
+    {
+      "label": "Docker: Restart",
+      "type": "shell",
+      "command": "docker-compose restart",
+      "problemMatcher": [],
+      "group": "none",
+      "presentation": {
+        "reveal": "always",
+        "panel": "new"
+      }
+    },
+    {
+      "label": "Docker: Build and Up",
+      "dependsOn": ["Docker: Build All", "Docker: Up"],
+      "dependsOrder": "sequence",
+      "problemMatcher": [],
+      "group": "none"
+    },
+    {
+      "label": "Docker: View Bridge Logs",
+      "type": "shell",
+      "command": "docker-compose logs -f whatsapp-bridge",
+      "problemMatcher": [],
+      "group": "none",
+      "presentation": {
+        "reveal": "always",
+        "panel": "new"
+      }
+    },
+    {
+      "label": "Docker: View MCP Logs",
+      "type": "shell",
+      "command": "docker-compose logs -f whatsapp-mcp-server",
+      "problemMatcher": [],
+      "group": "none",
+      "presentation": {
+        "reveal": "always",
+        "panel": "new"
+      }
+    },
+    {
+      "label": "Docker: Push Images",
+      "type": "shell",
+      "command": "docker-compose push",
+      "problemMatcher": [],
+      "group": "none",
+      "presentation": {
+        "reveal": "always",
+        "panel": "new"
+      }
+    }
+  ]
+}
