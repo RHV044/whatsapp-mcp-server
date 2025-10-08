@@ -14,22 +14,83 @@ Here's an example of what you can do when it's connected to Claude.
 
 > *Caution:* as with many MCP servers, the WhatsApp MCP is subject to [the lethal trifecta](https://simonwillison.net/2025/Jun/16/the-lethal-trifecta/). This means that project injection could lead to private data exfiltration.
 
+## Architecture
+
+This project consists of two main components:
+
+1. **WhatsApp Bridge** (Go) - Handles WhatsApp authentication and message storage
+2. **MCP Server** (Python) - Provides MCP tools for Claude/AI assistants
+
+### Transport Modes
+
+The MCP Server supports two transport modes:
+
+- **HTTP/SSE Mode** (Default for Docker): For remote access from any device (mobile, desktop, etc.)
+- **stdio Mode**: For local access only (when running manually)
+
 ## Installation
 
-### Option 1: Docker (Recommended)
+### Option 1: Docker (Recommended for Remote Access)
 
-The easiest way to run this project is using Docker. See [DOCKER_README.md](./DOCKER_README.md) for complete Docker setup instructions.
+The easiest way to run this project with remote access is using Docker. This setup includes:
+- WhatsApp Bridge with automatic reconnection
+- MCP Server with HTTP/SSE transport
+- Nginx reverse proxy with SSL/HTTPS and HTTP Basic Authentication
+- Automatic SSL certificate renewal with Certbot
+
+See [DOCKER_README.md](./DOCKER_README.md) for complete Docker setup instructions.
 
 Quick start:
 ```bash
-# Build and start all services
+# 1. Create authentication credentials
+./create-htpasswd.sh
+
+# 2. Build and start all services
 docker-compose up -d
 
-# View logs to scan QR code (first time only)
+# 3. View logs to scan QR code (first time only)
 docker-compose logs -f whatsapp-bridge
+
+# 4. Access from any device at:
+# https://your-domain.com:8443/messages (requires username/password)
 ```
 
-### Option 2: Manual Installation
+### 🔒 Security
+
+**IMPORTANT**: The MCP server is protected with HTTP Basic Authentication to prevent unauthorized access to your WhatsApp messages.
+
+#### Setting up authentication:
+
+```bash
+# Run the script to create credentials
+./create-htpasswd.sh
+
+# Or manually with htpasswd
+htpasswd -Bc nginx/.htpasswd yourusername
+```
+
+#### Configure Claude Desktop with authentication:
+
+```json
+{
+  "mcpServers": {
+    "whatsapp": {
+      "url": "https://rzdevquality.com:8443/messages",
+      "transport": "sse",
+      "headers": {
+        "Authorization": "Basic <base64_encoded_credentials>"
+      }
+    }
+  }
+}
+```
+
+To generate the base64 credentials:
+```bash
+echo -n "username:password" | base64
+```
+
+### Option 2: Manual Installation (Local Access Only)
 
 #### Prerequisites
 

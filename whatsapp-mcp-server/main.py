@@ -471,5 +471,75 @@ def resume_scheduled_message(message_id: str) -> Dict[str, Any]:
         }
 
 if __name__ == "__main__":
-    # Initialize and run the server
-    mcp.run(transport='stdio')
+    import sys
+    import asyncio
+    from mcp.server.sse import SseServerTransport
+    from starlette.applications import Starlette
+    from starlette.routing import Route
+    from starlette.responses import Response
+    import uvicorn
+    
+    # Check if running in HTTP/SSE mode or stdio mode
+    # Use environment variable or command line argument to determine mode
+    mode = os.environ.get('MCP_TRANSPORT', 'stdio').lower()
+    
+    # Allow command line override: python main.py --http or python main.py --stdio
+    if len(sys.argv) > 1:
+        if sys.argv[1] in ['--http', '--sse']:
+            mode = 'http'
+        elif sys.argv[1] == '--stdio':
+            mode = 'stdio'
+    
+    if mode == 'http':
+        # HTTP/SSE mode for remote access
+        print("🌐 Starting MCP Server in HTTP/SSE mode...")
+        print(f"📡 Bridge URL: {BRIDGE_BASE_URL}")
+        
+        sse = SseServerTransport("/messages")
+        
+        async def handle_sse(request):
+            async with sse.connect_sse(
+                request.scope,
+                request.receive,
+                request._send,
+            ) as streams:
+                await mcp.run(
+                    streams[0],
+                    streams[1],
+                    mcp.create_initialization_options(),
+                )
+            return Response()
+        
+        async def handle_health(request):
+            """Health check endpoint"""
+            return Response(
+                content='{"status": "healthy", "mode": "http"}',
+                media_type="application/json"
+            )
+        
+        # Create Starlette app
+        app = Starlette(
+            debug=True,
+            routes=[
+                Route("/messages", endpoint=handle_sse),
+                Route("/health", endpoint=handle_health),
+                Route("/sse", endpoint=handle_sse),  # Alternative endpoint
+            ],
+        )
+        
+        # Get port from environment or default to 8300 (8000-8999 range available)
+        port = int(os.environ.get('MCP_PORT', '8300'))
+        host = os.environ.get('MCP_HOST', '0.0.0.0')
+        
+        print(f"✅ Server ready on http://{host}:{port}")
+        print(f"📍 SSE endpoint: http://{host}:{port}/messages")
+        print(f"💚 Health check: http://{host}:{port}/health")
+        
+        # Run the server
+        uvicorn.run(app, host=host, port=port, log_level="info")
+    
+    else:
+        # stdio mode for local access
+        print("💻 Starting MCP Server in stdio mode...")
+        print(f"📡 Bridge URL: {BRIDGE_BASE_URL}")
+        mcp.run(transport='stdio')

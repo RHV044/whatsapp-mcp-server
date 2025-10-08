@@ -2,6 +2,11 @@
 claude_desktop_config.json
 whatsapp.log
 
+# Security - Don't commit passwords!
+nginx/.htpasswd
+certbot/conf/
+certbot/www/
+
 # Docker
 .env
 docker-compose.override.yml
