@@ -92,15 +92,19 @@ jobs:
           port: ${{ secrets.SSH_PORT }}
           script: |
             cd /opt/whatsapp-mcp-server
-            echo "Stopping old containers..."
+            echo "🛑 Stopping old containers..."
             docker compose down
-            echo "Pulling latest images..."
+            
+            echo "📥 Pulling latest images from Docker Hub..."
             docker compose pull
-            echo "Starting services with new images..."
-            docker compose up -d
-            echo "Cleaning up old images..."
+            
+            echo "🚀 Starting services with new images (force recreate)..."
+            docker compose up -d --force-recreate
+            
+            echo "🧹 Cleaning up old images..."
             docker image prune -af
-            echo "Deployment completed!"
+            
+            echo "✅ Deployment completed!"
             docker compose ps
 
       - name: Verify Deployment
@@ -111,8 +115,25 @@ jobs:
           password: ${{ secrets.SSH_PASSWORD }}
           port: ${{ secrets.SSH_PORT }}
           script: |
-            echo "Checking service health..."
+            echo "⏳ Waiting for services to start..."
+            sleep 15
+            
             cd /opt/whatsapp-mcp-server
-            sleep 10
+            
+            echo "📊 Service Status:"
             docker compose ps
-            docker compose logs --tail=20
+            
+            echo ""
+            echo "📝 Recent Logs:"
+            docker compose logs --tail=30 whatsapp-mcp-server
+            
+            echo ""
+            echo "🔐 Checking OAuth Configuration:"
+            docker compose exec -T whatsapp-mcp-server env | grep -E "OAUTH|SERVER_BASE_URL" || echo "⚠️  OAuth vars not found"
+            
+            echo ""
+            echo "🌐 Testing OAuth Endpoints:"
+            curl -s -f https://rzdevquality.com:8443/.well-known/oauth-authorization-server > /dev/null && echo "✅ OAuth Authorization Server: OK" || echo "❌ OAuth Authorization Server: FAILED"
+            curl -s -f https://rzdevquality.com:8443/.well-known/oauth-protected-resource > /dev/null && echo "✅ OAuth Protected Resource: OK" || echo "❌ OAuth Protected Resource: FAILED"
+            curl -s -f https://rzdevquality.com:8443/health > /dev/null && echo "✅ Health Check: OK" || echo "❌ Health Check: FAILED"
+
