@@ -54,6 +54,9 @@ services:
       - MCP_TRANSPORT=http
       - MCP_PORT=8300
       - MCP_HOST=0.0.0.0
+      - OAUTH_ENABLED=true
+      - SERVER_BASE_URL=https://rzdevquality.com:8443
+      - OAUTH_ISSUER=https://rzdevquality.com:8443
     logging:
       driver: "json-file"
       options:
