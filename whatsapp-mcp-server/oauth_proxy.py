@@ -25,6 +25,15 @@ MCP_BACKEND = os.environ.get('MCP_BACKEND', 'http://localhost:8301')
 OAUTH_CLIENT_ID = os.environ.get('OAUTH_CLIENT_ID', 'whatsapp-mcp-client-rzdev')
 OAUTH_CLIENT_SECRET = os.environ.get('OAUTH_CLIENT_SECRET', 'sk_whatsapp_mcp_2025_secure_secret_key_v1_production')
 
+# Whitelist of allowed redirect URIs for Dynamic Client Registration
+# Only Claude.ai and Anthropic domains can register as OAuth clients
+ALLOWED_REDIRECT_URI_DOMAINS = [
+    "https://claude.ai",
+    "https://claude.anthropic.com",
+    "https://api.claude.ai",
+    "https://api.anthropic.com"
+]
+
 # In-memory storage (use Redis/DB in production)
 oauth_codes = {}
 oauth_tokens = {}
@@ -63,6 +72,8 @@ async def register_client(request: Request):
     
     Allows Claude.ai to automatically register and obtain client credentials
     without manual configuration by the user.
+    
+    SECURITY: Only whitelisted domains (Claude.ai/Anthropic) can register.
     """
     try:
         body = await request.json()
@@ -71,6 +82,20 @@ async def register_client(request: Request):
         redirect_uris = body.get("redirect_uris", [])
         if not redirect_uris:
             raise HTTPException(status_code=400, detail="redirect_uris is required")
+        
+        # SECURITY: Validate redirect URIs against whitelist
+        allowed = False
+        for uri in redirect_uris:
+            for allowed_domain in ALLOWED_REDIRECT_URI_DOMAINS:
+                if uri.startswith(allowed_domain):
+                    allowed = True
+                    break
+            if not allowed:
+                print(f"🚫 Rejected registration attempt with unauthorized redirect URI: {uri}")
+                raise HTTPException(
+                    status_code=403, 
+                    detail=f"Registration not allowed. Redirect URI must be from Claude.ai or Anthropic domains."
+                )
         
         # Generate client credentials
         client_id = f"mcp-{secrets.token_urlsafe(16)}"
