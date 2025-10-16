@@ -2,10 +2,6 @@ from typing import List, Dict, Any, Optional
 from mcp.server.fastmcp import FastMCP
 import requests
 import os
-import secrets
-import hashlib
-import base64
-from datetime import datetime, timedelta
 from whatsapp import (
     search_contacts as whatsapp_search_contacts,
     list_messages as whatsapp_list_messages,
@@ -21,19 +17,10 @@ from whatsapp import (
     download_media as whatsapp_download_media,
     dataclass_to_dict
 )
+import sys
 
 # Configuration from environment variables or defaults
 BRIDGE_BASE_URL = os.environ.get('WHATSAPP_BRIDGE_URL', 'http://localhost:8080')
-
-# OAuth Configuration
-OAUTH_ENABLED = os.environ.get('OAUTH_ENABLED', 'false').lower() == 'true'
-SERVER_BASE_URL = os.environ.get('SERVER_BASE_URL', 'https://rzdevquality.com:8443')
-OAUTH_ISSUER = os.environ.get('OAUTH_ISSUER', SERVER_BASE_URL)
-
-# Simple in-memory storage for OAuth (for production, use Redis or database)
-oauth_clients = {}
-oauth_tokens = {}
-oauth_codes = {}
 
 # Initialize FastMCP server
 mcp = FastMCP("whatsapp")
@@ -505,368 +492,27 @@ if __name__ == "__main__":
             mode = 'stdio'
     
     if mode == 'http':
-        # HTTP Streamable mode for remote access with OAuth 2.1
+        # HTTP Streamable mode using FastMCP's built-in implementation
         print("🌐 Starting MCP Server in HTTP Streamable mode...")
         print(f"📡 Bridge URL: {BRIDGE_BASE_URL}")
-        print(f"🔒 OAuth enabled: {OAUTH_ENABLED}")
         
-        # OAuth 2.1 Helper Functions
-        def generate_token():
-            """Generate a secure random token"""
-            return secrets.token_urlsafe(32)
-        
-        def verify_token(token: str, expected_audience: str) -> Optional[Dict]:
-            """Verify and return token data if valid"""
-            if token in oauth_tokens:
-                token_data = oauth_tokens[token]
-                if token_data['expires_at'] > datetime.now():
-                    if token_data.get('resource') == expected_audience:
-                        return token_data
-                else:
-                    del oauth_tokens[token]
-            return None
-        
-        def extract_bearer_token(authorization: str) -> Optional[str]:
-            """Extract Bearer token from Authorization header"""
-            if authorization and authorization.startswith('Bearer '):
-                return authorization[7:]
-            return None
-        
-        # OAuth Endpoints
-        async def handle_well_known_oauth_protected_resource(request):
-            """RFC 9728 - Protected Resource Metadata"""
-            metadata = {
-                "resource": SERVER_BASE_URL,
-                "authorization_servers": [OAUTH_ISSUER]
-            }
-            return JSONResponse(metadata)
-        
-        async def handle_well_known_oauth_authorization_server(request):
-            """RFC 8414 - Authorization Server Metadata"""
-            metadata = {
-                "issuer": OAUTH_ISSUER,
-                "authorization_endpoint": f"{SERVER_BASE_URL}/oauth/authorize",
-                "token_endpoint": f"{SERVER_BASE_URL}/oauth/token",
-                "registration_endpoint": f"{SERVER_BASE_URL}/oauth/register",
-                "response_types_supported": ["code"],
-                "grant_types_supported": ["authorization_code", "refresh_token"],
-                "token_endpoint_auth_methods_supported": ["none", "client_secret_post"],
-                "code_challenge_methods_supported": ["S256"],
-                "revocation_endpoint": f"{SERVER_BASE_URL}/oauth/revoke",
-                "scopes_supported": ["whatsapp:read", "whatsapp:write"]
-            }
-            return JSONResponse(metadata)
-        
-        async def handle_oauth_register(request):
-            """RFC 7591 - Dynamic Client Registration"""
-            try:
-                body = await request.json()
-                client_id = generate_token()
-                client_secret = generate_token() if body.get('token_endpoint_auth_method') != 'none' else None
-                
-                client_data = {
-                    'client_id': client_id,
-                    'client_secret': client_secret,
-                    'redirect_uris': body.get('redirect_uris', []),
-                    'client_name': body.get('client_name', 'Unknown Client'),
-                    'grant_types': body.get('grant_types', ['authorization_code', 'refresh_token']),
-                    'created_at': datetime.now()
-                }
-                
-                oauth_clients[client_id] = client_data
-                
-                response_data = {
-                    'client_id': client_id,
-                    'client_id_issued_at': int(client_data['created_at'].timestamp()),
-                    'client_name': client_data['client_name'],
-                    'redirect_uris': client_data['redirect_uris'],
-                    'grant_types': client_data['grant_types'],
-                    'token_endpoint_auth_method': 'client_secret_post' if client_secret else 'none'
-                }
-                
-                if client_secret:
-                    response_data['client_secret'] = client_secret
-                
-                print(f"✅ Registered new OAuth client: {client_data['client_name']} ({client_id})")
-                return JSONResponse(response_data, status_code=201)
-            except Exception as e:
-                print(f"❌ Client registration failed: {e}")
-                return JSONResponse({'error': 'invalid_request', 'error_description': str(e)}, status_code=400)
-        
-        async def handle_oauth_authorize(request):
-            """OAuth Authorization Endpoint"""
-            client_id = request.query_params.get('client_id')
-            redirect_uri = request.query_params.get('redirect_uri')
-            state = request.query_params.get('state')
-            code_challenge = request.query_params.get('code_challenge')
-            code_challenge_method = request.query_params.get('code_challenge_method', 'S256')
-            resource = request.query_params.get('resource')
-            
-            if client_id not in oauth_clients:
-                return JSONResponse({'error': 'invalid_client'}, status_code=400)
-            
-            client = oauth_clients[client_id]
-            
-            if redirect_uri not in client['redirect_uris']:
-                return JSONResponse({'error': 'invalid_redirect_uri'}, status_code=400)
-            
-            # Auto-approve (in production, show consent screen)
-            code = generate_token()
-            oauth_codes[code] = {
-                'client_id': client_id,
-                'redirect_uri': redirect_uri,
-                'code_challenge': code_challenge,
-                'code_challenge_method': code_challenge_method,
-                'resource': resource or SERVER_BASE_URL,
-                'expires_at': datetime.now() + timedelta(minutes=10),
-                'used': False
-            }
-            
-            callback_url = f"{redirect_uri}?code={code}"
-            if state:
-                callback_url += f"&state={state}"
-            
-            print(f"✅ Authorization code issued for client {client_id}")
-            return RedirectResponse(callback_url)
-        
-        async def handle_oauth_token(request):
-            """OAuth Token Endpoint"""
-            try:
-                body = await request.form()
-                grant_type = body.get('grant_type')
-                
-                if grant_type == 'authorization_code':
-                    code = body.get('code')
-                    client_id = body.get('client_id')
-                    code_verifier = body.get('code_verifier')
-                    resource = body.get('resource')
-                    
-                    if code not in oauth_codes:
-                        return JSONResponse({'error': 'invalid_grant'}, status_code=400)
-                    
-                    code_data = oauth_codes[code]
-                    
-                    if code_data['used'] or code_data['expires_at'] < datetime.now():
-                        return JSONResponse({'error': 'invalid_grant'}, status_code=400)
-                    
-                    if code_data['client_id'] != client_id:
-                        return JSONResponse({'error': 'invalid_client'}, status_code=400)
-                    
-                    # Validate PKCE
-                    if code_data.get('code_challenge'):
-                        if not code_verifier:
-                            return JSONResponse({'error': 'invalid_request', 'error_description': 'code_verifier required'}, status_code=400)
-                        
-                        if code_data['code_challenge_method'] == 'S256':
-                            verifier_hash = base64.urlsafe_b64encode(
-                                hashlib.sha256(code_verifier.encode()).digest()
-                            ).decode().rstrip('=')
-                            
-                            if verifier_hash != code_data['code_challenge']:
-                                return JSONResponse({'error': 'invalid_grant', 'error_description': 'PKCE validation failed'}, status_code=400)
-                    
-                    code_data['used'] = True
-                    
-                    # Generate tokens
-                    access_token = generate_token()
-                    refresh_token = generate_token()
-                    
-                    token_resource = resource or code_data['resource']
-                    
-                    oauth_tokens[access_token] = {
-                        'client_id': client_id,
-                        'token_type': 'Bearer',
-                        'resource': token_resource,
-                        'scope': 'whatsapp:read whatsapp:write',
-                        'expires_at': datetime.now() + timedelta(hours=1),
-                        'refresh_token': refresh_token
-                    }
-                    
-                    oauth_tokens[refresh_token] = {
-                        'client_id': client_id,
-                        'token_type': 'refresh_token',
-                        'resource': token_resource,
-                        'access_token': access_token,
-                        'expires_at': datetime.now() + timedelta(days=30)
-                    }
-                    
-                    print(f"✅ Access token issued for client {client_id}")
-                    return JSONResponse({
-                        'access_token': access_token,
-                        'token_type': 'Bearer',
-                        'expires_in': 3600,
-                        'refresh_token': refresh_token,
-                        'scope': 'whatsapp:read whatsapp:write'
-                    })
-                
-                elif grant_type == 'refresh_token':
-                    refresh_token = body.get('refresh_token')
-                    resource = body.get('resource')
-                    
-                    if refresh_token not in oauth_tokens:
-                        return JSONResponse({'error': 'invalid_grant'}, status_code=400)
-                    
-                    refresh_data = oauth_tokens[refresh_token]
-                    
-                    if refresh_data['expires_at'] < datetime.now():
-                        return JSONResponse({'error': 'invalid_grant'}, status_code=400)
-                    
-                    old_access_token = refresh_data.get('access_token')
-                    if old_access_token and old_access_token in oauth_tokens:
-                        del oauth_tokens[old_access_token]
-                    
-                    new_access_token = generate_token()
-                    new_refresh_token = generate_token()
-                    
-                    token_resource = resource or refresh_data['resource']
-                    
-                    oauth_tokens[new_access_token] = {
-                        'client_id': refresh_data['client_id'],
-                        'token_type': 'Bearer',
-                        'resource': token_resource,
-                        'scope': 'whatsapp:read whatsapp:write',
-                        'expires_at': datetime.now() + timedelta(hours=1),
-                        'refresh_token': new_refresh_token
-                    }
-                    
-                    oauth_tokens[new_refresh_token] = {
-                        'client_id': refresh_data['client_id'],
-                        'token_type': 'refresh_token',
-                        'resource': token_resource,
-                        'access_token': new_access_token,
-                        'expires_at': datetime.now() + timedelta(days=30)
-                    }
-                    
-                    del oauth_tokens[refresh_token]
-                    
-                    print(f"✅ Token refreshed for client {refresh_data['client_id']}")
-                    return JSONResponse({
-                        'access_token': new_access_token,
-                        'token_type': 'Bearer',
-                        'expires_in': 3600,
-                        'refresh_token': new_refresh_token,
-                        'scope': 'whatsapp:read whatsapp:write'
-                    })
-                
-                else:
-                    return JSONResponse({'error': 'unsupported_grant_type'}, status_code=400)
-                    
-            except Exception as e:
-                print(f"❌ Token endpoint error: {e}")
-                return JSONResponse({'error': 'server_error', 'error_description': str(e)}, status_code=500)
-        
-        # Authentication Middleware
-        async def require_auth(request: Request):
-            """Check OAuth authentication"""
-            if not OAUTH_ENABLED:
-                return None
-            
-            authorization = request.headers.get('Authorization')
-            
-            if not authorization:
-                return Response(
-                    status_code=401,
-                    headers={
-                        'WWW-Authenticate': f'Bearer realm="{SERVER_BASE_URL}", resource="{SERVER_BASE_URL}/.well-known/oauth-protected-resource"'
-                    },
-                    content=json.dumps({"error": "unauthorized", "error_description": "Authorization header required"})
-                )
-            
-            token = extract_bearer_token(authorization)
-            if not token:
-                return Response(
-                    status_code=401,
-                    headers={'WWW-Authenticate': f'Bearer realm="{SERVER_BASE_URL}", error="invalid_token"'},
-                    content=json.dumps({"error": "invalid_token", "error_description": "Invalid authorization header format"})
-                )
-            
-            token_data = verify_token(token, SERVER_BASE_URL)
-            if not token_data:
-                return Response(
-                    status_code=401,
-                    headers={'WWW-Authenticate': f'Bearer realm="{SERVER_BASE_URL}", error="invalid_token"'},
-                    content=json.dumps({"error": "invalid_token", "error_description": "Token is invalid or expired"})
-                )
-            
-            request.state.token_data = token_data
-            return None
-        
-        # MCP Endpoints (HTTP Streamable)
-        async def handle_mcp_messages(request):
-            """HTTP Streamable transport for MCP - handles JSON-RPC requests"""
-            auth_error = await require_auth(request)
-            if auth_error:
-                return auth_error
-            
-            try:
-                body = await request.json()
-                
-                # Basic JSON-RPC 2.0 response
-                # TODO: Integrate with FastMCP's actual HTTP handler
-                return JSONResponse({
-                    "jsonrpc": "2.0",
-                    "result": {
-                        "protocolVersion": "2024-11-05",
-                        "capabilities": {
-                            "tools": {},
-                            "resources": {},
-                            "prompts": {}
-                        },
-                        "serverInfo": {
-                            "name": "whatsapp",
-                            "version": "1.0.0"
-                        }
-                    },
-                    "id": body.get("id")
-                })
-            except Exception as e:
-                print(f"❌ MCP request error: {e}")
-                return JSONResponse({
-                    "jsonrpc": "2.0",
-                    "error": {
-                        "code": -32603,
-                        "message": "Internal error",
-                        "data": str(e)
-                    },
-                    "id": None
-                }, status_code=500)
-        
-        async def handle_health(request):
-            """Health check endpoint (no auth required)"""
-            return JSONResponse({
-                "status": "healthy",
-                "mode": "http_streamable",
-                "oauth_enabled": OAUTH_ENABLED,
-                "timestamp": datetime.now().isoformat()
-            })
-        
-        # Create Starlette app
-        routes = [
-            # OAuth 2.1 endpoints
-            Route("/.well-known/oauth-protected-resource", endpoint=handle_well_known_oauth_protected_resource),
-            Route("/.well-known/oauth-authorization-server", endpoint=handle_well_known_oauth_authorization_server),
-            Route("/oauth/register", endpoint=handle_oauth_register, methods=["POST"]),
-            Route("/oauth/authorize", endpoint=handle_oauth_authorize),
-            Route("/oauth/token", endpoint=handle_oauth_token, methods=["POST"]),
-            
-            # MCP endpoints
-            Route("/messages", endpoint=handle_mcp_messages, methods=["POST"]),
-            Route("/health", endpoint=handle_health),
-        ]
-        
-        app = Starlette(debug=True, routes=routes)
-        
+        # Use FastMCP's built-in run method with streamable-http transport
+        # This properly implements the MCP HTTP Streamable protocol with both GET and POST support
         port = int(os.environ.get('MCP_PORT', '8300'))
         host = os.environ.get('MCP_HOST', '0.0.0.0')
         
-        print(f"✅ Server ready on http://{host}:{port}")
-        print(f"📍 MCP endpoint: http://{host}:{port}/messages")
-        print(f"🔐 OAuth authorize: {SERVER_BASE_URL}/oauth/authorize")
-        print(f"🎫 OAuth token: {SERVER_BASE_URL}/oauth/token")
-        print(f"📝 OAuth register: {SERVER_BASE_URL}/oauth/register")
-        print(f"💚 Health check: http://{host}:{port}/health")
+        # Configure FastMCP settings for HTTP mode
+        mcp.settings.host = host
+        mcp.settings.port = port
+        mcp.settings.streamable_http_path = "/messages"
         
-        uvicorn.run(app, host=host, port=port, log_level="info")
+        print(f"✅ Server ready to start on http://{host}:{port}")
+        print(f"📍 MCP endpoint: http://{host}:{port}/messages")
+        print(f"💚 Health check will be handled by nginx")
+        print(f"🔐 OAuth will be handled by nginx")
+        
+        # Run using FastMCP's built-in streamable-http transport
+        mcp.run(transport='streamable-http')
     
     else:
         # stdio mode for local access
