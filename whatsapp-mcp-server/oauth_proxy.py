@@ -28,6 +28,7 @@ OAUTH_CLIENT_SECRET = os.environ.get('OAUTH_CLIENT_SECRET', 'sk_whatsapp_mcp_202
 # In-memory storage (use Redis/DB in production)
 oauth_codes = {}
 oauth_tokens = {}
+registered_clients = {}  # client_id -> {client_secret, client_name, redirect_uris, created_at}
 
 app = FastAPI(title="WhatsApp MCP OAuth Proxy")
 
@@ -43,16 +44,68 @@ app.add_middleware(
 # OAuth 2.1 Discovery Endpoint
 @app.get("/.well-known/oauth-authorization-server")
 async def oauth_metadata():
-    """OAuth 2.1 Authorization Server Metadata"""
+    """OAuth 2.1 Authorization Server Metadata with Dynamic Client Registration"""
     return {
         "issuer": SERVER_URL,
         "authorization_endpoint": f"{SERVER_URL}/oauth/authorize",
         "token_endpoint": f"{SERVER_URL}/oauth/token",
+        "registration_endpoint": f"{SERVER_URL}/oauth/register",
         "response_types_supported": ["code"],
         "grant_types_supported": ["authorization_code"],
         "code_challenge_methods_supported": ["S256"],
         "token_endpoint_auth_methods_supported": ["client_secret_post"],
     }
+
+# Dynamic Client Registration Endpoint (RFC 7591)
+@app.post("/oauth/register")
+async def register_client(request: Request):
+    """OAuth 2.1 Dynamic Client Registration (RFC 7591)
+    
+    Allows Claude.ai to automatically register and obtain client credentials
+    without manual configuration by the user.
+    """
+    try:
+        body = await request.json()
+        
+        # Validate required fields
+        redirect_uris = body.get("redirect_uris", [])
+        if not redirect_uris:
+            raise HTTPException(status_code=400, detail="redirect_uris is required")
+        
+        # Generate client credentials
+        client_id = f"mcp-{secrets.token_urlsafe(16)}"
+        client_secret = secrets.token_urlsafe(32)
+        
+        # Store client registration
+        registered_clients[client_id] = {
+            "client_secret": client_secret,
+            "client_name": body.get("client_name", "MCP Client"),
+            "redirect_uris": redirect_uris,
+            "grant_types": body.get("grant_types", ["authorization_code"]),
+            "response_types": body.get("response_types", ["code"]),
+            "token_endpoint_auth_method": body.get("token_endpoint_auth_method", "client_secret_post"),
+            "created_at": datetime.now().isoformat()
+        }
+        
+        print(f"✅ Registered new OAuth client: {client_id}")
+        print(f"   Client Name: {body.get('client_name', 'MCP Client')}")
+        print(f"   Redirect URIs: {redirect_uris}")
+        
+        # Return client credentials (RFC 7591 response)
+        return {
+            "client_id": client_id,
+            "client_secret": client_secret,
+            "client_id_issued_at": int(datetime.now().timestamp()),
+            "client_secret_expires_at": 0,  # Never expires
+            "redirect_uris": redirect_uris,
+            "grant_types": ["authorization_code"],
+            "response_types": ["code"],
+            "token_endpoint_auth_method": "client_secret_post"
+        }
+        
+    except Exception as e:
+        print(f"❌ Error registering client: {e}")
+        raise HTTPException(status_code=400, detail=str(e))
 
 # OAuth Authorization Endpoint
 @app.get("/oauth/authorize")
@@ -65,8 +118,15 @@ async def authorize(
     code_challenge_method: str
 ):
     """OAuth 2.1 Authorization Endpoint with PKCE"""
-    if client_id != OAUTH_CLIENT_ID:
+    # Validate client_id - accept both hardcoded and dynamically registered clients
+    if client_id != OAUTH_CLIENT_ID and client_id not in registered_clients:
         raise HTTPException(status_code=400, detail="Invalid client_id")
+    
+    # Validate redirect_uri for dynamically registered clients
+    if client_id in registered_clients:
+        client_data = registered_clients[client_id]
+        if redirect_uri not in client_data["redirect_uris"]:
+            raise HTTPException(status_code=400, detail="Invalid redirect_uri")
     
     if response_type != "code":
         raise HTTPException(status_code=400, detail="Unsupported response_type")
@@ -107,7 +167,15 @@ async def token(
     if grant_type != "authorization_code":
         raise HTTPException(status_code=400, detail="Unsupported grant_type")
     
-    if client_id != OAUTH_CLIENT_ID or client_secret != OAUTH_CLIENT_SECRET:
+    # Validate client credentials - support both hardcoded and dynamic clients
+    valid_credentials = False
+    if client_id == OAUTH_CLIENT_ID and client_secret == OAUTH_CLIENT_SECRET:
+        valid_credentials = True
+    elif client_id in registered_clients:
+        if registered_clients[client_id]["client_secret"] == client_secret:
+            valid_credentials = True
+    
+    if not valid_credentials:
         raise HTTPException(status_code=401, detail="Invalid client credentials")
     
     if code not in oauth_codes:
