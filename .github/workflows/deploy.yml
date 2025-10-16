@@ -128,12 +128,10 @@ jobs:
             docker compose logs --tail=30 whatsapp-mcp-server
             
             echo ""
-            echo "🔐 Checking OAuth Configuration:"
-            docker compose exec -T whatsapp-mcp-server env | grep -E "OAUTH|SERVER_BASE_URL" || echo "⚠️  OAuth vars not found"
-            
-            echo ""
-            echo "🌐 Testing OAuth Endpoints:"
-            curl -s -f https://rzdevquality.com:8443/.well-known/oauth-authorization-server > /dev/null && echo "✅ OAuth Authorization Server: OK" || echo "❌ OAuth Authorization Server: FAILED"
-            curl -s -f https://rzdevquality.com:8443/.well-known/oauth-protected-resource > /dev/null && echo "✅ OAuth Protected Resource: OK" || echo "❌ OAuth Protected Resource: FAILED"
-            curl -s -f https://rzdevquality.com:8443/health > /dev/null && echo "✅ Health Check: OK" || echo "❌ Health Check: FAILED"
+            echo "🌐 Testing MCP Endpoint:"
+            curl -s -f -X POST https://rzdevquality.com:8443/messages \
+              -H "Content-Type: application/json" \
+              -H "Accept: application/json, text/event-stream" \
+              -d '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2025-06-18","capabilities":{},"clientInfo":{"name":"test","version":"1.0.0"}}}' \
+              > /dev/null && echo "✅ MCP Server: OK" || echo "❌ MCP Server: FAILED"
 

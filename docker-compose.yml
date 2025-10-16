@@ -54,9 +54,9 @@ services:
       - MCP_TRANSPORT=http
       - MCP_PORT=8300
       - MCP_HOST=0.0.0.0
-      - OAUTH_ENABLED=true
-      - SERVER_BASE_URL=https://rzdevquality.com:8443
-      - OAUTH_ISSUER=https://rzdevquality.com:8443
+      - SERVER_URL=https://rzdevquality.com:8443
+      - OAUTH_CLIENT_ID=whatsapp-mcp-client-rzdev
+      - OAUTH_CLIENT_SECRET=sk_whatsapp_mcp_2025_secure_secret_key_v1_production
     logging:
       driver: "json-file"
       options:

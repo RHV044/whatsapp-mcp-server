@@ -19,14 +19,18 @@ RUN uv pip install --system -r pyproject.toml
 # Copy application code
 COPY . .
 
+# Make start script executable
+RUN chmod +x start.sh
+
 # Environment variables for HTTP/SSE mode
 ENV MCP_TRANSPORT=http
-ENV MCP_PORT=8300
+ENV MCP_PORT=8301
 ENV MCP_HOST=0.0.0.0
+ENV PROXY_PORT=8300
+ENV PROXY_HOST=0.0.0.0
 
-# Expose MCP server port for HTTP/SSE transport (8000-8999 range)
+# Expose OAuth Proxy port (8300) - this is what nginx will proxy to
 EXPOSE 8300
 
-# Run the MCP server in HTTP mode by default
-# Can be overridden to stdio mode by setting MCP_TRANSPORT=stdio
-CMD ["python", "main.py"]
+# Run the start script that launches both OAuth proxy and MCP server
+CMD ["./start.sh"]

@@ -492,12 +492,140 @@ if __name__ == "__main__":
             mode = 'stdio'
     
     if mode == 'http':
-        # HTTP Streamable mode using FastMCP's built-in implementation
-        print("🌐 Starting MCP Server in HTTP Streamable mode...")
+        # HTTP Streamable mode with OAuth 2.1
+        print("🌐 Starting MCP Server with OAuth 2.1 in HTTP Streamable mode...")
         print(f"📡 Bridge URL: {BRIDGE_BASE_URL}")
+        print(f"🔐 OAuth Client ID: {OAUTH_CLIENT_ID}")
+        print(f"🔑 OAuth Client Secret: {OAUTH_CLIENT_SECRET[:8]}...{OAUTH_CLIENT_SECRET[-4:]}")
         
-        # Use FastMCP's built-in run method with streamable-http transport
-        # This properly implements the MCP HTTP Streamable protocol with both GET and POST support
+        # Create FastAPI app for OAuth endpoints
+        app = FastAPI(title="WhatsApp MCP Server with OAuth 2.1")
+        
+        # Add CORS middleware
+        app.add_middleware(
+            CORSMiddleware,
+            allow_origins=["*"],
+            allow_credentials=True,
+            allow_methods=["*"],
+            allow_headers=["*"],
+        )
+        
+        # OAuth 2.1 Discovery Endpoint
+        @app.get("/.well-known/oauth-authorization-server")
+        async def oauth_metadata():
+            """OAuth 2.1 Authorization Server Metadata"""
+            return {
+                "issuer": SERVER_URL,
+                "authorization_endpoint": f"{SERVER_URL}/oauth/authorize",
+                "token_endpoint": f"{SERVER_URL}/oauth/token",
+                "response_types_supported": ["code"],
+                "grant_types_supported": ["authorization_code"],
+                "code_challenge_methods_supported": ["S256"],
+                "token_endpoint_auth_methods_supported": ["client_secret_post"],
+            }
+        
+        # OAuth Authorization Endpoint
+        @app.get("/oauth/authorize")
+        async def authorize(
+            response_type: str,
+            client_id: str,
+            redirect_uri: str,
+            state: str,
+            code_challenge: str,
+            code_challenge_method: str
+        ):
+            """OAuth 2.1 Authorization Endpoint with PKCE"""
+            # Validate client_id
+            if client_id != OAUTH_CLIENT_ID:
+                raise HTTPException(status_code=400, detail="Invalid client_id")
+            
+            # Validate response_type
+            if response_type != "code":
+                raise HTTPException(status_code=400, detail="Unsupported response_type")
+            
+            # Validate PKCE
+            if code_challenge_method != "S256":
+                raise HTTPException(status_code=400, detail="Only S256 code_challenge_method is supported")
+            
+            # Generate authorization code
+            auth_code = secrets.token_urlsafe(32)
+            
+            # Store authorization code with PKCE challenge
+            oauth_codes[auth_code] = {
+                "client_id": client_id,
+                "redirect_uri": redirect_uri,
+                "code_challenge": code_challenge,
+                "expires_at": datetime.now() + timedelta(minutes=10)
+            }
+            
+            # Redirect back to client with code
+            return RedirectResponse(
+                url=f"{redirect_uri}?code={auth_code}&state={state}",
+                status_code=302
+            )
+        
+        # OAuth Token Endpoint
+        @app.post("/oauth/token")
+        async def token(
+            grant_type: str = Form(...),
+            code: str = Form(...),
+            redirect_uri: str = Form(...),
+            client_id: str = Form(...),
+            client_secret: str = Form(...),
+            code_verifier: str = Form(...)
+        ):
+            """OAuth 2.1 Token Endpoint with PKCE"""
+            # Validate grant_type
+            if grant_type != "authorization_code":
+                raise HTTPException(status_code=400, detail="Unsupported grant_type")
+            
+            # Validate client credentials
+            if client_id != OAUTH_CLIENT_ID or client_secret != OAUTH_CLIENT_SECRET:
+                raise HTTPException(status_code=401, detail="Invalid client credentials")
+            
+            # Validate authorization code
+            if code not in oauth_codes:
+                raise HTTPException(status_code=400, detail="Invalid authorization code")
+            
+            code_data = oauth_codes[code]
+            
+            # Check expiration
+            if datetime.now() > code_data["expires_at"]:
+                del oauth_codes[code]
+                raise HTTPException(status_code=400, detail="Authorization code expired")
+            
+            # Validate redirect_uri matches
+            if redirect_uri != code_data["redirect_uri"]:
+                raise HTTPException(status_code=400, detail="Redirect URI mismatch")
+            
+            # Validate PKCE code_verifier
+            verifier_hash = base64.urlsafe_b64encode(
+                hashlib.sha256(code_verifier.encode()).digest()
+            ).decode().rstrip('=')
+            
+            if verifier_hash != code_data["code_challenge"]:
+                raise HTTPException(status_code=400, detail="Invalid code_verifier")
+            
+            # Delete used authorization code
+            del oauth_codes[code]
+            
+            # Generate access token
+            access_token = secrets.token_urlsafe(32)
+            
+            # Store access token
+            oauth_tokens[access_token] = {
+                "client_id": client_id,
+                "expires_at": datetime.now() + timedelta(hours=24)
+            }
+            
+            return {
+                "access_token": access_token,
+                "token_type": "Bearer",
+                "expires_in": 86400  # 24 hours
+            }
+        
+        # Mount FastMCP's HTTP Streamable endpoint
+        # We need to get the ASGI app from FastMCP
         port = int(os.environ.get('MCP_PORT', '8300'))
         host = os.environ.get('MCP_HOST', '0.0.0.0')
         
@@ -506,13 +634,21 @@ if __name__ == "__main__":
         mcp.settings.port = port
         mcp.settings.streamable_http_path = "/messages"
         
+        # Get FastMCP's ASGI app and mount it
+        from mcp.server.fastmcp.server import create_app_streamable
+        mcp_app = create_app_streamable(mcp)
+        
+        # Mount MCP app under /messages
+        app.mount("/messages", mcp_app)
+        
         print(f"✅ Server ready to start on http://{host}:{port}")
         print(f"📍 MCP endpoint: http://{host}:{port}/messages")
-        print(f"💚 Health check will be handled by nginx")
-        print(f"🔐 OAuth will be handled by nginx")
+        print(f"� OAuth discovery: http://{host}:{port}/.well-known/oauth-authorization-server")
+        print(f"� OAuth authorize: http://{host}:{port}/oauth/authorize")
+        print(f"🎫 OAuth token: http://{host}:{port}/oauth/token")
         
-        # Run using FastMCP's built-in streamable-http transport
-        mcp.run(transport='streamable-http')
+        # Run with uvicorn
+        uvicorn.run(app, host=host, port=port)
     
     else:
         # stdio mode for local access
